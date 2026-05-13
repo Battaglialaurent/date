@@ -1,0 +1,1138 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <title>Nos sorties 💝</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400;1,700&family=Plus+Jakarta+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+
+  <!-- ══ FIREBASE SDK ══ -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-app.js";
+    import { getDatabase, ref, onValue, push, remove, update } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-database.js";
+
+    const firebaseConfig = {
+      apiKey:            "AIzaSyAKOmYnpnx0u-luZZLkKonEH0sbFxeaAEg",
+      authDomain:        "date-f808c.firebaseapp.com",
+      databaseURL:       "https://date-f808c-b7373-default-rtdb.firebaseio.com",
+      projectId:         "date-f808c",
+      storageBucket:     "date-f808c.firebasestorage.app",
+      messagingSenderId: "430296013554",
+      appId:             "1:430296013554:web:e4249cab779b3881fe0e6b"
+    };
+
+    let app, db;
+    try {
+      app = initializeApp(firebaseConfig);
+      db  = getDatabase(app);
+    } catch(e) { console.error('Firebase init error:', e); }
+
+    if (db) {
+      window._fb = { ideasRef:()=>ref(db,'ideas'), memoriesRef:()=>ref(db,'memories'), ideaRef:(k)=>ref(db,`ideas/${k}`), memoryRef:(k)=>ref(db,`memories/${k}`), push, remove, update, onValue, ref, db };
+
+      onValue(ref(db,'ideas'), snap => {
+        if (!snap.exists()) {
+          [
+            { name:'Pique-nique au parc', cat:'Balade', budget:'gratuit', note:'Emporter une bouteille 🍷', done:false },
+            { name:'Restaurant japonais', cat:'Restau', budget:'€€', note:'Tester les nouveaux makis', done:false },
+            { name:'Musée en amoureux', cat:'Culture', budget:'€', note:'Expo impressionniste', done:false },
+            { name:'Film + plaid + pop-corn', cat:'Cocooning', budget:'gratuit', note:'Soirée binge-watching', done:false },
+            { name:'Randonnée en forêt', cat:'Balade', budget:'gratuit', note:'', done:false },
+            { name:'Cours de cuisine ensemble', cat:'Gourmand', budget:'€€', note:'', done:false },
+          ].forEach(d => push(ref(db,'ideas'), d));
+        }
+      }, { onlyOnce: true });
+
+      onValue(ref(db,'memories'), snap => {
+        if (!snap.exists()) {
+          [
+            { name:'Week-end à la mer', cat:'Voyage', date:'2025-07-14', rating:5, note:"Les pieds dans l'eau, soleil couchant sur la falaise 🌅" },
+            { name:'Marché de Noël', cat:'Gourmand', date:'2025-12-20', rating:4, note:'Vin chaud et lumières, on y retournera !' },
+          ].forEach(d => push(ref(db,'memories'), d));
+        }
+      }, { onlyOnce: true });
+
+      onValue(ref(db,'ideas'), snap => {
+        const raw = snap.val() || {};
+        window._ideas = Object.entries(raw).map(([fbKey,v]) => ({ fbKey, ...v }));
+        window.renderList && window.renderList();
+        window.buildListFilters && window.buildListFilters();
+        window.buildWheelFilters && window.buildWheelFilters();
+        window.drawWheel && window.drawWheel();
+        const el = document.getElementById('badge-count');
+        if (el) el.textContent = window._ideas.filter(i => !i.done).length;
+      });
+
+      onValue(ref(db,'memories'), snap => {
+        const raw = snap.val() || {};
+        window._memories = Object.entries(raw).map(([fbKey,v]) => ({ fbKey, ...v }));
+        window.renderMemories && window.renderMemories();
+        window.renderStats && window.renderStats();
+        window.buildMemFilters && window.buildMemFilters();
+        const el = document.getElementById('badge-mem');
+        if (el) el.textContent = window._memories.length;
+      });
+
+      onValue(ref(db,'.info/connected'), snap => {
+        const dot = document.getElementById('sync-dot');
+        if (snap.val()) { if(dot)dot.className='sync-dot ok'; }
+        else { if(dot)dot.className='sync-dot err'; }
+      });
+    }
+  </script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --rose:        #C94B7A;
+      --rose-light:  #FDF0F5;
+      --rose-mid:    #E88BB0;
+      --rose-pale:   #FAE0EA;
+      --rose-dark:   #7A1F3E;
+      --cream:       #FDF8F4;
+      --ink:         #1E1B18;
+      --ink-soft:    #7A756E;
+      --ink-muted:   #C2BDB6;
+      --border:      rgba(30,27,24,0.08);
+      --border-rose: rgba(201,75,122,0.2);
+      --green:       #1A8F6A;
+      --green-light: #E5F4EE;
+      --amber:       #A86A00;
+      --amber-light: #FFF0D6;
+      --card-shadow: 0 2px 20px rgba(201,75,122,0.07);
+      --nav-h:       68px;
+      --safe-bottom: env(safe-area-inset-bottom, 16px);
+    }
+
+    html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background: var(--cream);
+      color: var(--ink);
+      min-height: 100vh;
+      min-height: 100dvh;
+      overflow-x: hidden;
+      padding-bottom: calc(var(--nav-h) + var(--safe-bottom));
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    /* ── HEART CANVAS ── */
+    #heart-canvas {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      pointer-events: none; z-index: 9999;
+    }
+
+    /* ── HEADER ── */
+    header {
+      background: rgba(253,248,244,0.92);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+      padding: 1rem 1.25rem 0.85rem;
+      position: sticky; top: 0; z-index: 100;
+    }
+    .header-row { display: flex; align-items: center; gap: 10px; }
+    h1 {
+      font-family: 'Playfair Display', serif;
+      font-weight: 400; font-size: 24px; line-height: 1;
+      flex: 1;
+    }
+    h1 em { font-style: italic; color: var(--rose); }
+
+    .sync-dot {
+      width: 8px; height: 8px; border-radius: 50%; background: #ccc;
+      display: inline-block; transition: background .4s; flex-shrink: 0;
+    }
+    .sync-dot.ok  { background: var(--green); }
+    .sync-dot.err { background: #E24B4A; }
+
+    /* ── BOTTOM NAV ── */
+    nav {
+      position: fixed; bottom: 0; left: 0; right: 0; z-index: 200;
+      background: rgba(253,248,244,0.96);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border-top: 1px solid var(--border);
+      display: flex; align-items: stretch;
+      height: calc(var(--nav-h) + var(--safe-bottom));
+      padding-bottom: var(--safe-bottom);
+    }
+    .nav-btn {
+      flex: 1; display: flex; flex-direction: column; align-items: center;
+      justify-content: center; gap: 4px;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: 10px; font-weight: 500; letter-spacing: .02em;
+      color: var(--ink-muted); background: none; border: none;
+      cursor: pointer; padding: 6px 4px;
+      transition: color .2s; position: relative;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .nav-btn svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.8; transition: transform .2s; }
+    .nav-btn.active { color: var(--rose); }
+    .nav-btn.active svg { transform: scale(1.1); }
+    .nav-btn:active svg { transform: scale(0.9); }
+
+    .nav-badge {
+      position: absolute; top: 6px; right: calc(50% - 16px);
+      min-width: 16px; height: 16px; border-radius: 20px;
+      background: var(--rose); color: white;
+      font-size: 9px; font-weight: 600; padding: 0 4px;
+      display: flex; align-items: center; justify-content: center;
+    }
+
+    /* ── MAIN ── */
+    main { max-width: 440px; margin: 0 auto; padding: 1.25rem 1rem 1rem; }
+    .panel { display: none; }
+    .panel.active { display: block; }
+
+    .section-head { margin-bottom: 1rem; }
+    .section-title {
+      font-family: 'Playfair Display', serif;
+      font-weight: 400; font-size: 22px;
+    }
+    .section-title em { font-style: italic; color: var(--rose); }
+    .section-sub { font-size: 12px; color: var(--ink-soft); margin-top: 3px; }
+
+    /* ── PILLS ── */
+    .filter-row {
+      display: flex; gap: 6px; flex-wrap: nowrap;
+      overflow-x: auto; -webkit-overflow-scrolling: touch;
+      scrollbar-width: none; margin-bottom: 1rem;
+      padding-bottom: 2px;
+    }
+    .filter-row::-webkit-scrollbar { display: none; }
+    .pill {
+      flex-shrink: 0;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: 12px; font-weight: 500;
+      padding: 6px 14px; border-radius: 20px;
+      border: 1.5px solid var(--border);
+      background: white; color: var(--ink-soft);
+      cursor: pointer; transition: all .2s; white-space: nowrap;
+    }
+    .pill.active { background: var(--rose); color: white; border-color: var(--rose); }
+
+    /* ── IDEAS CARDS ── */
+    .ideas-list { display: flex; flex-direction: column; gap: 10px; }
+    .idea-card {
+      display: flex; align-items: center; gap: 12px;
+      background: white; border: 1px solid var(--border);
+      border-radius: 16px; padding: 14px 15px;
+      box-shadow: var(--card-shadow);
+      transition: transform .15s, box-shadow .15s;
+      -webkit-tap-highlight-color: transparent;
+      animation: slideUp .3s ease both;
+    }
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .idea-card:active { transform: scale(0.98); }
+    .cat-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+    .idea-body { flex: 1; min-width: 0; }
+    .idea-name { font-size: 14px; font-weight: 600; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .idea-meta { font-size: 12px; color: var(--ink-soft); margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .idea-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+
+    .budget-tag {
+      font-size: 10px; padding: 3px 8px;
+      border-radius: 20px; font-weight: 600; flex-shrink: 0;
+    }
+    .done-badge {
+      font-size: 10px; padding: 3px 8px; border-radius: 20px;
+      background: var(--green-light); color: var(--green); font-weight: 600;
+    }
+    .btn-icon {
+      background: none; border: none; cursor: pointer;
+      color: var(--ink-muted); border-radius: 10px; padding: 7px;
+      display: flex; align-items: center; transition: all .2s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .btn-icon svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.8; }
+    .btn-icon:active { transform: scale(0.85); }
+    .btn-icon.check:active { color: var(--green); background: var(--green-light); }
+    .btn-icon.danger:active { color: #E24B4A; background: #FCEBEB; }
+
+    /* ── EMPTY ── */
+    .empty { text-align: center; padding: 3rem 1rem; color: var(--ink-soft); }
+    .empty-icon { font-size: 40px; margin-bottom: .75rem; }
+    .empty p { font-size: 14px; line-height: 1.7; }
+
+    /* ── FORM ── */
+    .form-card {
+      background: white; border: 1px solid var(--border);
+      border-radius: 20px; padding: 1.25rem;
+      box-shadow: var(--card-shadow);
+    }
+    .form-grid { display: flex; flex-direction: column; gap: 16px; }
+    label {
+      display: block; font-size: 11px; font-weight: 600;
+      color: var(--ink-soft); margin-bottom: 6px;
+      letter-spacing: .06em; text-transform: uppercase;
+    }
+    input[type="text"], input[type="date"], select, textarea {
+      width: 100%; font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: 15px; color: var(--ink);
+      background: var(--cream); border: 1.5px solid var(--border);
+      border-radius: 12px; padding: 12px 14px;
+      outline: none; transition: border-color .2s, background .2s;
+      -webkit-appearance: none; appearance: none;
+    }
+    input:focus, select:focus, textarea:focus {
+      border-color: var(--rose); background: white;
+    }
+    textarea { resize: none; min-height: 90px; line-height: 1.6; }
+
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+    .rating-group { display: flex; gap: 8px; flex-wrap: wrap; }
+    .rating-btn {
+      flex: 1; min-width: 0;
+      background: var(--cream); border: 1.5px solid var(--border);
+      border-radius: 10px; padding: 10px 6px;
+      font-family: 'Plus Jakarta Sans', sans-serif; font-size: 11px;
+      cursor: pointer; transition: all .2s; color: var(--ink-soft);
+      text-align: center; white-space: nowrap;
+    }
+    .rating-btn.active { background: var(--rose-pale); border-color: var(--rose-mid); color: var(--rose-dark); }
+
+    .btn-submit {
+      font-family: 'Playfair Display', serif; font-style: italic;
+      font-size: 18px; font-weight: 400;
+      background: linear-gradient(135deg, var(--rose), var(--rose-dark));
+      color: white; border: none; border-radius: 50px;
+      padding: 15px 28px; cursor: pointer;
+      transition: transform .15s, opacity .15s;
+      display: flex; align-items: center; justify-content: center;
+      gap: 8px; width: 100%;
+      box-shadow: 0 4px 20px rgba(201,75,122,0.35);
+    }
+    .btn-submit:active { transform: scale(0.97); opacity: .9; }
+    .btn-submit svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 2; }
+    .btn-submit:disabled { opacity: .5; }
+
+    /* ── WHEEL ── */
+    .wheel-wrap {
+      position: relative; width: 100%; max-width: 300px;
+      margin: 0 auto 1.25rem; aspect-ratio: 1;
+    }
+    canvas#wheel { width: 100%; height: 100%; display: block; }
+    .wheel-pointer {
+      position: absolute; top: -8px; left: 50%; transform: translateX(-50%);
+      width: 0; height: 0;
+      border-left: 10px solid transparent; border-right: 10px solid transparent;
+      border-top: 26px solid var(--rose-dark);
+      filter: drop-shadow(0 2px 4px rgba(0,0,0,.2));
+    }
+    .wheel-center {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+      width: 50px; height: 50px; border-radius: 50%; background: white;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px; box-shadow: 0 2px 12px rgba(0,0,0,.15); cursor: pointer;
+    }
+    .btn-spin {
+      font-family: 'Playfair Display', serif; font-style: italic;
+      font-weight: 400; font-size: 20px;
+      background: linear-gradient(135deg, var(--rose), var(--rose-dark));
+      color: white; border: none; border-radius: 50px;
+      padding: 15px 24px; cursor: pointer; width: 100%;
+      box-shadow: 0 4px 20px rgba(201,75,122,0.35);
+      transition: transform .15s, opacity .15s; margin-bottom: 1rem;
+    }
+    .btn-spin:active { transform: scale(0.97); opacity: .9; }
+    .btn-spin:disabled { opacity: .45; }
+
+    .result-box {
+      background: white; border: 1px solid var(--border-rose);
+      border-radius: 18px; padding: 1.25rem; text-align: center;
+      box-shadow: var(--card-shadow);
+      animation: pop .3s cubic-bezier(.34,1.56,.64,1);
+    }
+    @keyframes pop { from{opacity:0;transform:scale(.85)} to{opacity:1;transform:scale(1)} }
+    .result-label { font-size: 10px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--rose); margin-bottom: 8px; }
+    .result-name { font-family: 'Playfair Display', serif; font-size: 22px; color: var(--rose-dark); line-height: 1.2; margin-bottom: 6px; }
+    .result-detail { font-size: 12px; color: var(--ink-soft); }
+    .btn-done {
+      margin-top: 12px; font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: 13px; font-weight: 600;
+      background: var(--rose); color: white; border: none;
+      border-radius: 20px; padding: 9px 20px; cursor: pointer;
+      transition: opacity .15s; width: 100%;
+    }
+    .btn-done:active { opacity: .8; }
+
+    /* ── MEMORIES ── */
+    .stats-grid {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 8px; margin-bottom: 1.25rem;
+    }
+    .stat-card {
+      background: white; border: 1px solid var(--border);
+      border-radius: 14px; padding: .9rem; text-align: center;
+      box-shadow: var(--card-shadow);
+    }
+    .stat-num { font-family: 'Playfair Display', serif; font-size: 26px; color: var(--rose); line-height: 1; margin-bottom: 4px; }
+    .stat-label { font-size: 11px; color: var(--ink-soft); font-weight: 500; }
+
+    /* ── SORT ── */
+    .sort-row { display: flex; justify-content: flex-end; margin-bottom: .75rem; }
+    .sort-btn {
+      font-family: 'Plus Jakarta Sans', sans-serif; font-size: 11px; font-weight: 600;
+      padding: 6px 14px; border-radius: 20px;
+      border: 1.5px solid var(--border-rose); background: var(--rose-light);
+      color: var(--rose-dark); cursor: pointer;
+      display: flex; align-items: center; gap: 6px;
+      transition: background .2s;
+    }
+    .sort-btn svg { width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 2.5; }
+    .sort-btn:active { background: var(--rose-pale); }
+
+    /* ── TIMELINE ── */
+    .timeline { position: relative; }
+    .timeline::before {
+      content: ''; position: absolute; left: 14px; top: 8px; bottom: 8px;
+      width: 1.5px;
+      background: linear-gradient(to bottom, var(--rose-mid) 0%, transparent 100%);
+    }
+    .timeline-year {
+      position: relative; padding-left: 40px; margin: 1.25rem 0 .5rem;
+      font-family: 'Playfair Display', serif; font-size: 13px; font-style: italic;
+      color: var(--rose); letter-spacing: .05em;
+    }
+    .timeline-year::before {
+      content: ''; position: absolute; left: 7px; top: 50%; transform: translateY(-50%);
+      width: 14px; height: 14px; border-radius: 50%;
+      background: var(--rose); border: 3px solid var(--cream);
+      box-shadow: 0 0 0 2px var(--rose-mid);
+    }
+    .timeline-item { position: relative; padding-left: 40px; margin-bottom: 10px; }
+    .timeline-item::before {
+      content: ''; position: absolute; left: 9px; top: 18px;
+      width: 10px; height: 10px; border-radius: 50%;
+      background: white; border: 2px solid var(--rose-mid);
+    }
+    .memory-card {
+      background: white; border: 1px solid var(--border);
+      border-radius: 14px; padding: 13px 14px;
+      box-shadow: var(--card-shadow);
+    }
+    .memory-name { font-size: 14px; font-weight: 600; margin-bottom: 2px; }
+    .memory-date { font-size: 11px; color: var(--ink-soft); margin-bottom: 8px; }
+    .memory-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; align-items: center; }
+    .tag { font-size: 11px; padding: 2px 8px; border-radius: 20px; background: var(--cream); border: 1px solid var(--border); color: var(--ink-soft); }
+    .stars { color: var(--rose); font-size: 13px; }
+    .memory-note { font-size: 13px; color: var(--ink-soft); line-height: 1.6; font-style: italic; border-left: 2px solid var(--rose-mid); padding-left: 10px; }
+    .memory-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+
+    /* ── TOAST ── */
+    #toast {
+      position: fixed; bottom: calc(var(--nav-h) + var(--safe-bottom) + 12px); left: 50%;
+      transform: translateX(-50%) translateY(10px);
+      background: var(--ink); color: white; font-size: 13px; font-weight: 500;
+      padding: 11px 22px; border-radius: 50px; z-index: 9998;
+      transition: transform .35s cubic-bezier(.34,1.56,.64,1), opacity .35s;
+      opacity: 0; pointer-events: none; white-space: nowrap;
+      box-shadow: 0 4px 20px rgba(0,0,0,.2);
+    }
+    #toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --cream: #1A1614;
+        --ink: #F5F0EB;
+        --ink-soft: #9E9890;
+        --ink-muted: #5C5852;
+        --border: rgba(245,240,235,0.1);
+        --card-shadow: 0 2px 20px rgba(0,0,0,0.3);
+      }
+      header, nav { background: rgba(26,22,20,0.95); }
+      input, select, textarea { background: #26211E; border-color: rgba(245,240,235,0.12); color: var(--ink); }
+      input:focus, select:focus, textarea:focus { background: #2E2825; }
+      .form-card, .idea-card, .memory-card, .stat-card, .result-box { background: #26211E; }
+      .pill, .rating-btn { background: #26211E; }
+      select option { background: #26211E; }
+    }
+  </style>
+</head>
+<body>
+
+<canvas id="heart-canvas"></canvas>
+
+<header>
+  <div class="header-row">
+    <h1>nos <em>sorties</em> 💝</h1>
+    <span class="sync-dot" id="sync-dot" title="Synchronisation"></span>
+  </div>
+</header>
+
+<main>
+
+  <!-- ── LISTE ── -->
+  <div class="panel active" id="panel-list">
+    <div class="section-head">
+      <h2 class="section-title">Nos <em>idées</em></h2>
+      <div class="section-sub">Tapez ♥ pour marquer comme fait</div>
+    </div>
+    <div class="filter-row" id="list-filters">
+      <button class="pill active" data-cat="all" onclick="filterList(this,'all')">Tout</button>
+    </div>
+    <div class="ideas-list" id="ideas-list">
+      <div class="empty"><div class="empty-icon">⏳</div><p>Chargement…</p></div>
+    </div>
+  </div>
+
+  <!-- ── AJOUTER ── -->
+  <div class="panel" id="panel-add">
+    <div class="section-head"><h2 class="section-title"><em>Nouvelle</em> idée</h2></div>
+    <div class="form-card">
+      <div class="form-grid">
+        <div>
+          <label>Activité</label>
+          <input type="text" id="a-name" placeholder="Dîner aux chandelles, randonnée…" maxlength="70" />
+        </div>
+        <div class="two-col">
+          <div>
+            <label>Catégorie</label>
+            <select id="a-cat">
+              <option value="Restau">🍽 Restaurant</option>
+              <option value="Ciné">🎬 Cinéma</option>
+              <option value="Balade">🌿 Balade</option>
+              <option value="Culture">🎨 Culture</option>
+              <option value="Sport">⚡ Sport</option>
+              <option value="Cocooning">🕯 Cosy</option>
+              <option value="Voyage">✈️ Voyage</option>
+              <option value="Gourmand">🍰 Gourmand</option>
+              <option value="Autre">✨ Autre</option>
+            </select>
+          </div>
+          <div>
+            <label>Budget</label>
+            <select id="a-budget">
+              <option value="gratuit">Gratuit 💚</option>
+              <option value="€">€ petit</option>
+              <option value="€€" selected>€€ ok</option>
+              <option value="€€€">€€€ folie</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label>Note / lieu</label>
+          <textarea id="a-note" placeholder="Adresse, lien, idée d'ambiance…"></textarea>
+        </div>
+        <button class="btn-submit" id="btn-add-idea" onclick="addIdea()">
+          <svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+          Ajouter l'idée
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── ROUE ── -->
+  <div class="panel" id="panel-wheel">
+    <div class="section-head"><h2 class="section-title">La <em>roue</em> du destin</h2></div>
+    <div class="filter-row" id="wheel-filters">
+      <button class="pill active" data-cat="all" onclick="filterWheel(this,'all')">Tout</button>
+    </div>
+    <div class="wheel-wrap">
+      <div class="wheel-pointer"></div>
+      <canvas id="wheel" width="600" height="600"></canvas>
+      <div class="wheel-center" onclick="spinWheel()">🎲</div>
+    </div>
+    <button class="btn-spin" id="spin-btn" onclick="spinWheel()">Tourner !</button>
+    <div id="result-area"></div>
+  </div>
+
+  <!-- ── MÉMOIRE ── -->
+  <div class="panel" id="panel-memoir">
+    <div class="section-head"><h2 class="section-title">Notre <em>mémoire</em></h2></div>
+    <div class="stats-grid" id="stats-area"></div>
+    <div class="filter-row" id="mem-filters">
+      <button class="pill active" data-cat="all" onclick="filterMem(this,'all')">Tout</button>
+    </div>
+    <div class="sort-row">
+      <button class="sort-btn" id="sort-btn" onclick="toggleSort()">
+        <svg viewBox="0 0 24 24"><path d="M3 6h7M3 12h5M3 18h3"/><path d="M16 4v16M13 18l3 3 3-3"/></svg>
+        <span id="sort-label">A → Z</span>
+      </button>
+    </div>
+    <div id="memories-list"></div>
+  </div>
+
+  <!-- ── NOTER ── -->
+  <div class="panel" id="panel-add-mem">
+    <div class="section-head"><h2 class="section-title"><em>Raconter</em> une sortie</h2></div>
+    <div class="form-card">
+      <div class="form-grid">
+        <div>
+          <label>Nom de la sortie</label>
+          <input type="text" id="m-name" placeholder="Week-end à Étretat, soirée jazz…" maxlength="70" />
+        </div>
+        <div class="two-col">
+          <div>
+            <label>Catégorie</label>
+            <select id="m-cat">
+              <option value="Restau">🍽 Restaurant</option>
+              <option value="Ciné">🎬 Cinéma</option>
+              <option value="Balade">🌿 Balade</option>
+              <option value="Culture">🎨 Culture</option>
+              <option value="Sport">⚡ Sport</option>
+              <option value="Cocooning">🕯 Cosy</option>
+              <option value="Voyage">✈️ Voyage</option>
+              <option value="Gourmand">🍰 Gourmand</option>
+              <option value="Autre">✨ Autre</option>
+            </select>
+          </div>
+          <div>
+            <label>Date</label>
+            <input type="date" id="m-date" />
+          </div>
+        </div>
+        <div>
+          <label>Note ❤️</label>
+          <div class="rating-group" id="rating-group">
+            <button class="rating-btn" data-val="1" onclick="setRating(1)">⭐</button>
+            <button class="rating-btn" data-val="2" onclick="setRating(2)">⭐⭐</button>
+            <button class="rating-btn active" data-val="3" onclick="setRating(3)">⭐⭐⭐</button>
+            <button class="rating-btn" data-val="4" onclick="setRating(4)">⭐⭐⭐⭐</button>
+            <button class="rating-btn" data-val="5" onclick="setRating(5)">⭐⭐⭐⭐⭐</button>
+          </div>
+        </div>
+        <div>
+          <label>Souvenir / anecdote</label>
+          <textarea id="m-note" placeholder="Ce qu'on a aimé, un moment inoubliable…"></textarea>
+        </div>
+        <button class="btn-submit" id="btn-add-mem" onclick="addMemory()">
+          <svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+          Enregistrer le souvenir
+        </button>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<!-- BOTTOM NAV -->
+<nav>
+  <button class="nav-btn active" onclick="goTab('list')" id="tab-list">
+    <svg viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+    Idées
+    <span class="nav-badge" id="badge-count">–</span>
+  </button>
+  <button class="nav-btn" onclick="goTab('add')" id="tab-add">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg>
+    Ajouter
+  </button>
+  <button class="nav-btn" onclick="goTab('wheel')" id="tab-wheel">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>
+    Roue
+  </button>
+  <button class="nav-btn" onclick="goTab('memoir')" id="tab-memoir">
+    <svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+    Mémoire
+    <span class="nav-badge" id="badge-mem">–</span>
+  </button>
+  <button class="nav-btn" onclick="goTab('add-mem')" id="tab-add-mem">
+    <svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+    Noter
+  </button>
+</nav>
+
+<div id="toast"></div>
+
+<script>
+/* ═══════════════════════════════════════════════
+   HEART CANVAS ANIMATION
+═══════════════════════════════════════════════ */
+const canvas = document.getElementById('heart-canvas');
+const ctx2 = canvas.getContext('2d');
+let hearts = [];
+
+function resizeCanvas() {
+  canvas.width  = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+function heartPath(ctx, x, y, size) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(size / 30, size / 30);
+  ctx.beginPath();
+  ctx.moveTo(0, -10);
+  ctx.bezierCurveTo(5, -20, 20, -15, 20, 0);
+  ctx.bezierCurveTo(20, 12, 8, 22, 0, 30);
+  ctx.bezierCurveTo(-8, 22, -20, 12, -20, 0);
+  ctx.bezierCurveTo(-20, -15, -5, -20, 0, -10);
+  ctx.closePath();
+  ctx.restore();
+}
+
+function spawnHearts(x, y, count = 8) {
+  for (let i = 0; i < count; i++) {
+    hearts.push({
+      x, y,
+      vx: (Math.random() - 0.5) * 5,
+      vy: -3 - Math.random() * 4,
+      size: 10 + Math.random() * 20,
+      opacity: 1,
+      rot: (Math.random() - 0.5) * 0.6,
+      rotSpeed: (Math.random() - 0.5) * 0.12,
+      color: ['#C94B7A','#E88BB0','#F0C0D0','#D4537E','#FF8FAB'][Math.floor(Math.random()*5)],
+      life: 1,
+      delay: i * 40,
+      born: Date.now()
+    });
+  }
+}
+
+function animateHearts() {
+  ctx2.clearRect(0, 0, canvas.width, canvas.height);
+  const now = Date.now();
+  hearts = hearts.filter(h => h.life > 0.01);
+  hearts.forEach(h => {
+    if (now - h.born < h.delay) return;
+    h.x  += h.vx;
+    h.y  += h.vy;
+    h.vy += 0.12;
+    h.rot += h.rotSpeed;
+    h.life -= 0.018;
+    h.opacity = h.life;
+    ctx2.save();
+    ctx2.globalAlpha = h.opacity;
+    ctx2.translate(h.x, h.y);
+    ctx2.rotate(h.rot);
+    heartPath(ctx2, 0, 0, h.size);
+    ctx2.fillStyle = h.color;
+    ctx2.fill();
+    ctx2.restore();
+  });
+  requestAnimationFrame(animateHearts);
+}
+animateHearts();
+
+/* ═══════════════════════════════════════════════
+   HAPTIC
+═══════════════════════════════════════════════ */
+function haptic(type = 'light') {
+  if (!navigator.vibrate) return;
+  const patterns = { light: [15], medium: [30], heavy: [50, 30, 50], success: [20, 20, 60] };
+  navigator.vibrate(patterns[type] || [15]);
+}
+
+/* ═══════════════════════════════════════════════
+   STATE & CONFIG
+═══════════════════════════════════════════════ */
+window._ideas    = [];
+window._memories = [];
+let memSortOrder = 'asc'; // 'asc' = A→Z (ancien d'abord), 'desc' = Z→A (récent d'abord)
+let memRating    = 3;
+let memFilter    = 'all';
+let listFilter   = 'all';
+let wheelFilter  = 'all';
+let wheelRot = 0, spinning = false;
+
+const CAT_COLORS = {
+  Restau:'#C94B7A', 'Ciné':'#2F7FCC', Balade:'#1A8F6A',
+  Culture:'#7B69D4', Sport:'#CC7800', Cocooning:'#D4774F',
+  Voyage:'#1560B4', Gourmand:'#D43535', Autre:'#7A756E'
+};
+const BUDGET_STYLE = {
+  gratuit:{bg:'#E5F4EE',color:'#0F6348'}, '€':{bg:'#E5F4EE',color:'#0F6348'},
+  '€€':{bg:'#FFF0D6',color:'#7A4D00'}, '€€€':{bg:'#FAECE7',color:'#7A2C00'}
+};
+
+/* ═══════════════════════════════════════════════
+   TABS
+═══════════════════════════════════════════════ */
+function goTab(name) {
+  haptic('light');
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('panel-'+name).classList.add('active');
+  document.getElementById('tab-'+name).classList.add('active');
+  window.scrollTo(0, 0);
+  if (name==='wheel')   { buildWheelFilters(); drawWheel(); }
+  if (name==='memoir')  { buildMemFilters(); renderMemories(); renderStats(); }
+  if (name==='add-mem') { setTodayDate(); }
+}
+
+/* ═══════════════════════════════════════════════
+   IDEAS: LIST
+═══════════════════════════════════════════════ */
+window.buildListFilters = function() {
+  const cats = [...new Set(window._ideas.map(i => i.cat))].sort();
+  const row  = document.getElementById('list-filters');
+  if (!row) return;
+  row.innerHTML = `<button class="pill ${listFilter==='all'?'active':''}" data-cat="all" onclick="filterList(this,'all')">Tout</button>`;
+  cats.forEach(c => {
+    const b = document.createElement('button');
+    b.className = 'pill' + (listFilter===c?' active':'');
+    b.textContent = c; b.dataset.cat = c;
+    b.onclick = function(){ filterList(this,c); };
+    row.appendChild(b);
+  });
+  const bc = document.getElementById('badge-count');
+  if (bc) bc.textContent = window._ideas.filter(i=>!i.done).length;
+};
+
+function filterList(el, cat) {
+  haptic('light');
+  listFilter = cat;
+  document.querySelectorAll('#list-filters .pill').forEach(b => b.classList.toggle('active', b.dataset.cat===cat));
+  renderList();
+}
+
+window.renderList = function() {
+  const all  = window._ideas;
+  // Tri alphabétique des idées par nom
+  const sorted = [...(listFilter==='all' ? all : all.filter(i=>i.cat===listFilter))]
+    .sort((a,b) => a.name.localeCompare(b.name, 'fr'));
+
+  const el   = document.getElementById('ideas-list');
+  if (!el) return;
+  const bc = document.getElementById('badge-count');
+  if (bc) bc.textContent = all.filter(i=>!i.done).length;
+
+  if (!all.length)    { el.innerHTML=`<div class="empty"><div class="empty-icon">💝</div><p>Ajoutez votre première idée !</p></div>`; return; }
+  if (!sorted.length) { el.innerHTML=`<div class="empty"><div class="empty-icon">🔍</div><p>Aucune idée dans cette catégorie.</p></div>`; return; }
+
+  el.innerHTML = sorted.map((idea, idx) => {
+    const bs = BUDGET_STYLE[idea.budget] || BUDGET_STYLE['€€'];
+    return `<div class="idea-card" style="animation-delay:${idx*40}ms">
+      <div class="cat-dot" style="background:${CAT_COLORS[idea.cat]||'#888'}"></div>
+      <div class="idea-body">
+        <div class="idea-name" style="${idea.done?'text-decoration:line-through;opacity:.4':''}">${esc(idea.name)}</div>
+        <div class="idea-meta">${idea.cat}${idea.note?' · '+esc(idea.note):''}</div>
+      </div>
+      <div class="idea-actions">
+        <span class="budget-tag" style="background:${bs.bg};color:${bs.color}">${idea.budget}</span>
+        ${idea.done?'<span class="done-badge">✓</span>':''}
+        <button class="btn-icon check" title="${idea.done?'Remettre':'Marquer fait'}" onclick="toggleDone(event,'${idea.fbKey}',${!!idea.done})">
+          <svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>
+        </button>
+        <button class="btn-icon danger" title="Supprimer" onclick="deleteIdea(event,'${idea.fbKey}')">
+          <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+        </button>
+      </div>
+    </div>`;
+  }).join('');
+};
+
+async function addIdea() {
+  const name = document.getElementById('a-name').value.trim();
+  if (!name) { document.getElementById('a-name').focus(); toast('Donne un nom à l\'activité 😊'); return; }
+  if (!window._fb) { toast('Firebase non configuré ⚠️'); return; }
+  const btn = document.getElementById('btn-add-idea'); btn.disabled = true;
+  try {
+    await window._fb.push(window._fb.ideasRef(), {
+      name, done:false,
+      cat:    document.getElementById('a-cat').value,
+      budget: document.getElementById('a-budget').value,
+      note:   document.getElementById('a-note').value.trim(),
+    });
+    document.getElementById('a-name').value='';
+    document.getElementById('a-note').value='';
+    haptic('success');
+    // Spawn hearts at center screen
+    spawnHearts(window.innerWidth/2, window.innerHeight*0.4, 12);
+    setTimeout(() => { goTab('list'); toast('Idée ajoutée ! 💝'); }, 200);
+  } catch(e){ toast('Erreur : '+e.message); }
+  btn.disabled = false;
+}
+
+async function deleteIdea(e, fbKey) {
+  haptic('medium');
+  if (!window._fb) return;
+  await window._fb.remove(window._fb.ideaRef(fbKey));
+  toast('Idée supprimée');
+}
+
+async function toggleDone(e, fbKey, current) {
+  haptic('medium');
+  const rect = e.currentTarget.getBoundingClientRect();
+  const cx = rect.left + rect.width/2;
+  const cy = rect.top + rect.height/2;
+  if (!current) spawnHearts(cx, cy, 10);
+  if (!window._fb) return;
+  await window._fb.update(window._fb.ideaRef(fbKey), { done: !current });
+}
+
+/* ═══════════════════════════════════════════════
+   WHEEL
+═══════════════════════════════════════════════ */
+window.buildWheelFilters = function() {
+  const cats = [...new Set(window._ideas.filter(i=>!i.done).map(i=>i.cat))].sort();
+  const row  = document.getElementById('wheel-filters');
+  if (!row) return;
+  row.innerHTML=`<button class="pill ${wheelFilter==='all'?'active':''}" data-cat="all" onclick="filterWheel(this,'all')">Tout</button>`;
+  cats.forEach(c => {
+    const b=document.createElement('button');
+    b.className='pill'+(wheelFilter===c?' active':'');
+    b.textContent=c; b.dataset.cat=c; b.onclick=function(){filterWheel(this,c);};
+    row.appendChild(b);
+  });
+};
+
+function filterWheel(el,cat){
+  haptic('light');
+  wheelFilter=cat;
+  document.querySelectorAll('#wheel-filters .pill').forEach(b=>b.classList.toggle('active',b.dataset.cat===cat));
+  document.getElementById('result-area').innerHTML='';
+  drawWheel();
+}
+
+function getWheelIdeas(){
+  const base=window._ideas.filter(i=>!i.done);
+  return wheelFilter==='all'?base:base.filter(i=>i.cat===wheelFilter);
+}
+
+window.drawWheel=function(highlight=-1){
+  const canvas=document.getElementById('wheel'); if(!canvas)return;
+  const ctx=canvas.getContext('2d'), cx=300, cy=300, r=288;
+  ctx.clearRect(0,0,600,600);
+  const list=getWheelIdeas();
+  if(!list.length){
+    ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fillStyle='#F5EEED'; ctx.fill();
+    ctx.fillStyle='#9E9890'; ctx.textAlign='center';
+    ctx.font='bold 24px Plus Jakarta Sans'; ctx.fillText('Aucune idée !',cx,cy-10);
+    ctx.font='20px Plus Jakarta Sans'; ctx.fillText("Ajoutez-en d'abord 💝",cx,cy+26);
+    return;
+  }
+  const slice=(Math.PI*2)/list.length;
+  list.forEach((idea,i)=>{
+    const start=wheelRot+i*slice, end=start+slice;
+    const base=CAT_COLORS[idea.cat]||'#888';
+    ctx.beginPath(); ctx.moveTo(cx,cy); ctx.arc(cx,cy,r,start,end); ctx.closePath();
+    ctx.fillStyle=highlight===i?lighten(base):base; ctx.fill();
+    ctx.strokeStyle='white'; ctx.lineWidth=3; ctx.stroke();
+    ctx.save(); ctx.translate(cx,cy); ctx.rotate(start+slice/2);
+    ctx.textAlign='right'; ctx.fillStyle='rgba(255,255,255,0.95)';
+    ctx.shadowColor='rgba(0,0,0,.3)'; ctx.shadowBlur=5;
+    const fs=list.length>10?16:list.length>6?19:22;
+    ctx.font=`600 ${fs}px Plus Jakarta Sans`;
+    const label=idea.name.length>15?idea.name.slice(0,14)+'…':idea.name;
+    ctx.fillText(label,r-18,fs/3); ctx.restore();
+  });
+  ctx.beginPath(); ctx.arc(cx,cy,56,0,Math.PI*2); ctx.fillStyle='white'; ctx.fill();
+  ctx.strokeStyle='rgba(0,0,0,.06)'; ctx.lineWidth=2; ctx.stroke();
+};
+
+function lighten(hex){
+  let r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
+  return `rgb(${Math.min(255,r+65)},${Math.min(255,g+65)},${Math.min(255,b+65)})`;
+}
+
+function spinWheel(){
+  const list=getWheelIdeas(); if(!list.length||spinning)return;
+  haptic('heavy');
+  spinning=true; document.getElementById('spin-btn').disabled=true;
+  document.getElementById('result-area').innerHTML='';
+  const idx=Math.floor(Math.random()*list.length);
+  const slice=(Math.PI*2)/list.length;
+  const target=-(idx*slice+slice/2)+(Math.PI*1.5);
+  const extra=(7+Math.random()*5)*Math.PI*2;
+  const delta=((target-wheelRot)%(Math.PI*2)+Math.PI*2)%(Math.PI*2);
+  const total=extra+delta, dur=4500, t0=performance.now(), r0=wheelRot;
+  function frame(now){
+    const t=Math.min((now-t0)/dur,1), ease=1-Math.pow(1-t,4);
+    wheelRot=r0+total*ease; window.drawWheel();
+    if(t<1){requestAnimationFrame(frame);return;}
+    wheelRot=r0+total; spinning=false;
+    document.getElementById('spin-btn').disabled=false;
+    window.drawWheel(idx);
+    haptic('success');
+    // Burst hearts from wheel center
+    const wEl = document.getElementById('wheel');
+    const wr = wEl.getBoundingClientRect();
+    spawnHearts(wr.left+wr.width/2, wr.top+wr.height/2, 16);
+    const winner=list[idx], bs=BUDGET_STYLE[winner.budget]||BUDGET_STYLE['€€'];
+    document.getElementById('result-area').innerHTML=`
+      <div class="result-box">
+        <div class="result-label">C'est décidé… ✨</div>
+        <div class="result-name">${esc(winner.name)}</div>
+        ${winner.note?`<div class="result-detail" style="margin-top:5px;font-style:italic">${esc(winner.note)}</div>`:''}
+        <div class="result-detail" style="margin-top:6px">${winner.cat} · <span style="background:${bs.bg};color:${bs.color};padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600">${winner.budget}</span></div>
+        <button class="btn-done" onclick="markDoneFromWheel('${winner.fbKey}','${esc(winner.name).replace(/'/g,"\\'")}','${winner.cat}')">✓ On y va ! Noter en mémoire</button>
+      </div>`;
+  }
+  requestAnimationFrame(frame);
+}
+
+async function markDoneFromWheel(fbKey,name,cat){
+  haptic('medium');
+  if(window._fb) await window._fb.update(window._fb.ideaRef(fbKey),{done:true});
+  document.getElementById('m-name').value=name;
+  document.getElementById('m-cat').value=cat;
+  setTodayDate();
+  goTab('add-mem');
+  toast('Notez le souvenir ! 📖');
+}
+
+/* ═══════════════════════════════════════════════
+   MEMORIES
+═══════════════════════════════════════════════ */
+function setTodayDate(){
+  document.getElementById('m-date').value=new Date().toISOString().split('T')[0];
+}
+function setRating(val){
+  haptic('light');
+  memRating=val;
+  document.querySelectorAll('#rating-group .rating-btn').forEach(b=>b.classList.toggle('active',+b.dataset.val===val));
+}
+
+function toggleSort(){
+  haptic('light');
+  memSortOrder = memSortOrder==='asc' ? 'desc' : 'asc';
+  const lbl = document.getElementById('sort-label');
+  const btn = document.getElementById('sort-btn');
+  if (memSortOrder==='asc') {
+    lbl.textContent = 'A → Z';
+    btn.querySelector('svg').innerHTML='<path d="M3 6h7M3 12h5M3 18h3"/><path d="M16 4v16M13 18l3 3 3-3"/>';
+  } else {
+    lbl.textContent = 'Z → A';
+    btn.querySelector('svg').innerHTML='<path d="M3 6h7M3 12h5M3 18h3"/><path d="M16 4v16M13 7l3-3 3 3"/>';
+  }
+  renderMemories();
+}
+
+window.buildMemFilters = function(){
+  const cats=[...new Set(window._memories.map(m=>m.cat))].sort();
+  const row=document.getElementById('mem-filters'); if(!row)return;
+  row.innerHTML=`<button class="pill ${memFilter==='all'?'active':''}" data-cat="all" onclick="filterMem(this,'all')">Tout</button>`;
+  cats.forEach(c=>{
+    const b=document.createElement('button');
+    b.className='pill'+(memFilter===c?' active':'');
+    b.textContent=c; b.dataset.cat=c; b.onclick=function(){filterMem(this,c);};
+    row.appendChild(b);
+  });
+  const bm=document.getElementById('badge-mem'); if(bm)bm.textContent=window._memories.length;
+};
+
+function filterMem(el,cat){
+  haptic('light');
+  memFilter=cat;
+  document.querySelectorAll('#mem-filters .pill').forEach(b=>b.classList.toggle('active',b.dataset.cat===cat));
+  renderMemories();
+}
+
+window.renderMemories = function(){
+  const all=window._memories;
+  const list=memFilter==='all'?all:all.filter(m=>m.cat===memFilter);
+  const el=document.getElementById('memories-list'); if(!el)return;
+  const bm=document.getElementById('badge-mem'); if(bm)bm.textContent=all.length;
+  if(!all.length){ el.innerHTML=`<div class="empty"><div class="empty-icon">📖</div><p>Vos souvenirs apparaîtront ici.<br>Notez une sortie pour commencer !</p></div>`; return; }
+  if(!list.length){ el.innerHTML=`<div class="empty"><div class="empty-icon">🔍</div><p>Aucun souvenir dans cette catégorie.</p></div>`; return; }
+
+  // Tri alphabétique par nom (A→Z ou Z→A) — "ordre alphabétique" comme demandé
+  const sorted=[...list].sort((a,b)=>{
+    const na=a.name||'', nb=b.name||'';
+    return memSortOrder==='asc'
+      ? na.localeCompare(nb,'fr')
+      : nb.localeCompare(na,'fr');
+  });
+
+  // Groupement par lettre initiale
+  let currentLetter=null;
+  let html='<div class="timeline">';
+  sorted.forEach(m=>{
+    const letter = (m.name||'?')[0].toUpperCase();
+    if(letter!==currentLetter){
+      currentLetter=letter;
+      html+=`<div class="timeline-year">${letter}</div>`;
+    }
+    const stars='⭐'.repeat(m.rating||0);
+    const dateStr=m.date?new Date(m.date+'T12:00:00').toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'}):'';
+    html+=`<div class="timeline-item">
+      <div class="memory-card">
+        <div class="memory-head">
+          <div style="flex:1;min-width:0">
+            <div class="memory-name">${esc(m.name)}</div>
+            ${dateStr?`<div class="memory-date">📅 ${dateStr}</div>`:''}
+          </div>
+          <button class="btn-icon danger" onclick="deleteMemory(event,'${m.fbKey}')">
+            <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+          </button>
+        </div>
+        <div class="memory-tags">
+          <span class="tag" style="background:${CAT_COLORS[m.cat]||'#888'}22;color:${CAT_COLORS[m.cat]||'#888'};border-color:${CAT_COLORS[m.cat]||'#888'}44">${m.cat}</span>
+          <span class="stars">${stars}</span>
+        </div>
+        ${m.note?`<div class="memory-note">${esc(m.note)}</div>`:''}
+      </div>
+    </div>`;
+  });
+  html+='</div>';
+  el.innerHTML=html;
+};
+
+window.renderStats = function(){
+  const el=document.getElementById('stats-area'), all=window._memories; if(!el)return;
+  if(!all.length){el.innerHTML='';return;}
+  const avg=(all.reduce((a,m)=>a+(m.rating||0),0)/all.length).toFixed(1);
+  const cats={}; all.forEach(m=>{cats[m.cat]=(cats[m.cat]||0)+1;});
+  const favCat=Object.entries(cats).sort((a,b)=>b[1]-a[1])[0]?.[0]||'—';
+  el.innerHTML=`
+    <div class="stat-card"><div class="stat-num">${all.length}</div><div class="stat-label">sorties vécues</div></div>
+    <div class="stat-card"><div class="stat-num">${avg}⭐</div><div class="stat-label">note moyenne</div></div>
+    <div class="stat-card"><div class="stat-num" style="font-size:18px">${favCat}</div><div class="stat-label">catégorie favorite</div></div>
+    <div class="stat-card"><div class="stat-num" style="font-size:22px">💝</div><div class="stat-label">avec amour</div></div>`;
+};
+
+async function addMemory(){
+  const name=document.getElementById('m-name').value.trim();
+  if(!name){document.getElementById('m-name').focus();toast('Donne un nom au souvenir 😊');return;}
+  if(!window._fb){toast('Firebase non configuré ⚠️');return;}
+  const btn=document.getElementById('btn-add-mem'); btn.disabled=true;
+  try{
+    await window._fb.push(window._fb.memoriesRef(),{
+      name, rating:memRating,
+      cat:  document.getElementById('m-cat').value,
+      date: document.getElementById('m-date').value,
+      note: document.getElementById('m-note').value.trim(),
+    });
+    document.getElementById('m-name').value='';
+    document.getElementById('m-note').value='';
+    haptic('success');
+    spawnHearts(window.innerWidth/2, window.innerHeight*0.4, 14);
+    setRating(3);
+    setTimeout(()=>{ goTab('memoir'); toast('Souvenir enregistré 📖✨'); },200);
+  }catch(e){toast('Erreur : '+e.message);}
+  btn.disabled=false;
+}
+
+async function deleteMemory(e, fbKey){
+  haptic('medium');
+  if(!window._fb)return;
+  await window._fb.remove(window._fb.memoryRef(fbKey));
+  toast('Souvenir supprimé');
+}
+
+/* ═══════════════════════════════════════════════
+   UTILS
+═══════════════════════════════════════════════ */
+function esc(s){
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+let toastTimer;
+function toast(msg){
+  const el=document.getElementById('toast');
+  el.textContent=msg; el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>el.classList.remove('show'),2800);
+}
+
+/* ═══════════════════════════════════════════════
+   INIT
+═══════════════════════════════════════════════ */
+document.addEventListener('DOMContentLoaded',()=>{
+  setTodayDate();
+  window.renderList();
+});
+</script>
+</body>
+</html>
